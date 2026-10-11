@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PointDrawer pre APW</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Light Theme - Austere & Clean */
+            --bg-color: #f3f4f6; 
+            --panel-bg: #ffffff;
+            --text-color: #111827; 
+            --text-muted: #6b7280;
+            --border-color: #d1d5db;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --success: #16a34a;
+            --table-header: #f9fafb;
+            --table-hover: #f3f4f6;
+            --table-selected: #dbeafe;
+            --canvas-bg: #ffffff;
+            --axis-color: #9ca3af;
+            --radius: 2px; /* Very sharp corners for strict industrial look */
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] {
+            /* Dark Theme - High contrast */
+            --bg-color: #111827;
+            --panel-bg: #1f2937;
+            --text-color: #f9fafb;
+            --text-muted: #9ca3af;
+            --border-color: #374151;
+            --primary: #3b82f6;
+            --primary-hover: #60a5fa;
+            --danger: #ef4444;
+            --danger-hover: #f87171;
+            --table-header: #111827;
+            --table-hover: #374151;
+            --table-selected: #1e3a8a;
+            --canvas-bg: #111827;
+            --axis-color: #4b5563;
+            --shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            height: 100dvh; 
+            font-family: var(--font-ui);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Main Layout */
+        #app-wrapper { display: flex; flex: 1; overflow: hidden; flex-direction: row; }
+        
+        #canvas-section { 
+            flex: 1; position: relative; background-color: var(--canvas-bg); 
+            cursor: crosshair; touch-action: none; border-right: 1px solid var(--border-color); 
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* Floating tools styling */
+        .floating-tools {
+            position: absolute; top: 16px; left: 16px; display: flex; gap: 4px;
+            background: var(--panel-bg); padding: 4px; border-radius: var(--radius);
+            box-shadow: var(--shadow); border: 1px solid var(--border-color);
+        }
+        .floating-tools button { 
+            background: transparent; border: none; padding: 6px; 
+            border-radius: var(--radius); cursor:pointer; color: var(--text-color);
+            display: flex; align-items: center; justify-content: center; transition: background 0.1s;
+        }
+        .floating-tools button:hover { background: var(--table-hover); }
+        .floating-tools svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+        #sidebar { width: 400px; display: flex; flex-direction: column; background-color: var(--panel-bg); z-index: 5; }
+        
+        .table-container { flex: 1; overflow-y: auto; font-family: var(--font-mono); }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: right; }
+        th, td { border-bottom: 1px solid var(--border-color); padding: 8px 12px; }
+        th { background-color: var(--table-header); position: sticky; top: 0; font-family: var(--font-ui); font-weight: 600; color: var(--text-muted); z-index: 2; text-transform: uppercase; font-size: 11px; text-align: right; }
+        th:first-child, td:first-child { text-align: left; }
+        
+        tbody tr { transition: background 0.1s; cursor: pointer; }
+        tbody tr:hover { background-color: var(--table-hover); }
+        .selected-row { background-color: var(--table-selected) !important; font-weight: 500; }
+        
+        .sidebar-actions { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border-color); background: var(--panel-bg); }
+        .sidebar-actions button { flex: 1; justify-content: center; }
+        .sidebar-actions input[type="file"] { display: none; }
+
+        #controls-section { background-color: var(--panel-bg); padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; gap: 20px; z-index: 10; align-items: stretch; }
+        .control-box { border-right: 1px solid var(--border-color); padding-right: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .control-box:last-child { border-right: none; padding-right: 0; }
+        
+        .box-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .input-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+
+        input[type="text"], input[type="number"], select {
+            width: 75px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius);
+            background: var(--bg-color); color: var(--text-color); font-size: 13px; font-family: var(--font-mono); transition: border-color 0.1s;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+        
+        label { font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text-color); }
+        label input[type="radio"], label input[type="checkbox"] { margin: 0; cursor: pointer; accent-color: var(--primary); }
+        
+        /* Buttons */
+        button {
+            padding: 6px 12px; cursor: pointer; border: 1px solid var(--border-color); background-color: var(--panel-bg);
+            color: var(--text-color); border-radius: var(--radius); font-size: 13px; font-weight: 500; font-family: var(--font-ui);
+            transition: all 0.1s; display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px;
+        }
+        button:hover:not(:disabled) { background-color: var(--table-hover); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        
+        .btn-primary { background-color: var(--primary); color: white; border-color: var(--primary); }
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); border-color: var(--primary-hover); }
+        .btn-danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+        .btn-danger:hover:not(:disabled) { background-color: var(--danger); color: white; }
+        
+        .icon-btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+        
+        @media (max-width: 900px) {
+            #app-wrapper { flex-direction: column; }
+            #canvas-section { flex: 1; min-height: 40dvh; border-right: none; border-bottom: 1px solid var(--border-color); }
+            #sidebar { width: 100%; height: 25dvh; }
+            #controls-section { flex-direction: column; max-height: 35dvh; overflow-y: auto; gap: 15px; padding: 12px; }
+            .control-box { border-right: none; border-bottom: 1px solid var(--border-color); padding: 0 0 12px 0; width: 100%; flex: none !important; }
+            .control-box:last-child { border-bottom: none; padding-bottom: 0; }
+        }
+
+        #gcode-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-content { 
+            background: var(--panel-bg); padding: 24px; border-radius: var(--radius); width: 95%; max-width: 600px; 
+            box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-color); 
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+        .modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; font-family: var(--font-ui); }
+        .modal-content textarea { 
+            width: 100%; height: 350px; font-family: var(--font-mono); font-size: 13px; 
+            background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); 
+            padding: 12px; border-radius: var(--radius); resize: vertical; 
+        }
+        .modal-content textarea:focus { outline: none; border-color: var(--primary); }
+    </style>
+</head>
+<body>
+
+    <div id="app-wrapper">
+        <div id="canvas-section">
+            <canvas id="canvas"></canvas>
+            <div class="floating-tools">
+                <button onclick="krokSpat()" title="Krok späť">
+                    <svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
+                </button>
+                <button onclick="krokVpred()" title="Krok vpred">
+                    <svg viewBox="0 0 24 24"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>
+                </button>
+                <button onclick="clearAll()" title="Zmazať všetko">
+                    <svg viewBox="0 0 24 24" style="stroke: var(--danger);"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="sidebar">
+            <div class="table-container">
+                <table id="points-table">
+                    <thead><tr><th>#</th><th>abs X (Ø)</th><th>abs Z</th><th>inc X</th><th>inc Z</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="sidebar-actions">
+                <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)">
+                <button onclick="document.getElementById('csvFileInput').click()" class="icon-btn" title="Importovať CSV zo súboru">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Import
+                </button>
+                <button onclick="exportCSV()" class="icon-btn" title="Uložiť body do CSV">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export
+                </button>
+                <button class="btn-primary icon-btn" onclick="zobrazGCode()" title="Vygenerovať kód pre stroj">
+                    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> G-Kód
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls-section">
+        
+        <!-- Nástroj -->
+        <div class="control-box">
+            <div class="box-title">Poloha Nástroja (Nula)</div>
+            <div class="input-row">
+                <label>X(Ø): <input type="number" id="toolX" value="10" onchange="vykresli(); updateToolPosition();"></label>
+                <label>Z: <input type="number" id="toolZ" value="10" onchange="vykresli(); updateToolPosition();"></label>
+            </div>
+        </div>
+
+        <!-- Zadávanie -->
+        <div class="control-box">
+            <div class="box-title">Súradnice Bodu</div>
+            <div class="input-row">
+                <label><input type="radio" name="mode" id="absRadio" checked onchange="aktualizujPopisyVstupov()"> Abs (G90)</label>
+                <label><input type="radio" name="mode" id="incRadio" onchange="aktualizujPopisyVstupov()"> Inc (G91)</label>
+            </div>
+            <div class="input-row">
+                <label id="xLabel">X(Ø): <input type="number" id="xInput" placeholder="0.0"></label>
+                <label id="zLabel">Z: <input type="number" id="zInput" placeholder="0.0"></label>
+                <button class="btn-primary" onclick="pridajBodCezUI()">Pridať</button>
+            </div>
+        </div>
+
+        <!-- Spájanie -->
+        <div class="control-box" style="flex: 2;">
+            <div class="box-title">Geometria dráhy</div>
+            <div class="input-row">
+                <label><input type="checkbox" id="connectPointsCheck" checked> Pripojiť</label>
+                <select id="connectTypeCombo" onchange="typSpojeniaZmeneny()" style="width:100px;">
+                    <option value="Priamka">Priamka</option>
+                    <option value="Rádius (Oblúk)">Rádius</option>
+                </select>
+                <label id="valueLabel">Hrúbka: <input type="number" id="connectValueInput" value="1"></label>
+                <button id="flipArcButton" onclick="otocRadius()" disabled class="icon-btn" title="Otočiť smer oblúka">
+                   <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+            </div>
+            <div class="input-row">
+                <button class="icon-btn" onclick="aplikujNaVyber()">
+                    <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Aplikovať
+                </button>
+                <button class="btn-danger icon-btn" onclick="zmazOznacene()" style="margin-left: auto;">
+                    <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Zmazať
+                </button>
+            </div>
+        </div>
+
+        <!-- Zobrazenie -->
+        <div class="control-box" style="flex: 1;">
+            <div class="box-title">Zobrazenie</div>
+            <div class="input-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <label><input type="checkbox" id="showAxesCheck" checked onchange="vykresli()"> Osi</label>
+                <label><input type="checkbox" id="showLabelsCheck" checked onchange="vykresli()"> Označenie bodov</label>
+                <label><input type="checkbox" id="showMirrorCheck" onchange="vykresli()"> Zrkadlo</label>
+                <label><input type="checkbox" id="showToolCheck" checked onchange="vykresli()"> Nástroj</label>
+            </div>
+            <div class="input-row" style="margin-top: auto;">
+                <button onclick="toggleTheme()" id="theme-btn" style="width: 100%;" class="icon-btn">
+                     <svg viewBox="0 0 24 24" id="theme-icon"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg> <span id="theme-text">Tmavý režim</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gcode-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Exportovaný G-Kód</h2>
+                <button onclick="document.getElementById('gcode-modal').style.display='none'" style="border:none; background:transparent; font-size:24px; color: var(--text-muted); cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+            <textarea id="gcode-output" readonly spellcheck="false"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button class="icon-btn" onclick="kopirovatGcode()">
+                    <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Kopírovať
+                </button>
+                <button class="btn-primary" onclick="document.getElementById('gcode-modal').style.display='none'">Zavrieť</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- TÉMA ---
+        let isDarkMode = false;
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+            
+            const text = document.getElementById('theme-text');
+            const icon = document.getElementById('theme-icon');
+            if(isDarkMode) {
+                text.textContent = 'Svetlý režim';
+                icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+            } else {
+                text.textContent = 'Tmavý režim';
+                icon.innerHTML = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+            }
+            vykresli();
+        }
+
+        // --- DÁTOVÉ MODELY ---
+        let points = [];
+        let segments = [];
+        let selectedSegment = null;
+        let selectedPoints = [];
+        let hoveredPoint = null;
+        let nextPointId = 1;
+
+        // --- HISTÓRIA (UNDO/REDO) ---
+        let historyStack = [];
+        let historyIndex = -1;
+
+        function saveState() {
+            if (historyIndex < historyStack.length - 1) {
+                historyStack = historyStack.slice(0, historyIndex + 1);
+            }
+            let state = {
+                points: JSON.parse(JSON.stringify(points)),
+                segments: segments.map(s => ({ p1Id: s.p1.id, p2Id: s.p2.id, connType: s.connType, connValue: s.connValue, flipArc: s.flipArc })),
+                nextId: nextPointId,
+                toolX: document.getElementById('toolX').value,
+                toolZ: document.getElementById('toolZ').value
+            };
+            historyStack.push(state);
+            historyIndex++;
+        }
+
+        function restoreState(index) {
+            if (index < 0 || index >= historyStack.length) return;
+            let state = historyStack[index];
+            points = JSON.parse(JSON.stringify(state.points));
+            segments = state.segments.map(s => ({
+                p1: points.find(p => p.id === s.p1Id),
+                p2: points.find(p => p.id === s.p2Id),
+                connType: s.connType, connValue: s.connValue, flipArc: s.flipArc
+            }));
+            nextPointId = state.nextId;
+            document.getElementById('toolX').value = state.toolX;
+            document.getElementById('toolZ').value = state.toolZ;
+            
+            selectedPoints = []; selectedSegment = null; hoveredPoint = null;
+            prepocitajTabulku(); aktualizujTlacidloSmeru(); vykresli();
+        }
+
+        function krokSpat() { if (historyIndex > 0) restoreState(--historyIndex); }
+        function krokVpred() { if (historyIndex < historyStack.length - 1) restoreState(++historyIndex); }
+        function updateToolPosition() { prepocitajTabulku(); saveState(); }
+
+        // --- ZOBRAZENIE ---
+        let scale = 40.0;
+        let panX = 0, panY = 0;
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const tbody = document.querySelector('#points-table tbody');
+
+        new ResizeObserver(() => {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            vykresli();
+        }).observe(canvas.parentElement);
+
+        saveState(); 
+
+        // --- EVENTY PLÁTNA (Myš & Dotyk) ---
+        let isDragging = false;
+        let lastMousePt = { x: 0, y: 0 };
+        let drawnPathData = [];
+        let initialPinchDist = null, initialScale = null;
+
+        function getEvtCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+            return { x: e.offsetX, y: e.offsetY };
+        }
+
+        function handleZoom(delta, mouseX, mouseY) {
+            let oldScale = scale;
+            if (delta < 0) scale *= 1.15; else scale /= 1.15;
+            scale = Math.max(0.5, Math.min(scale, 500.0));
+            let mouseWorldZ = (mouseX - (canvas.width / 2.0 + panX)) / oldScale;
+            let mouseWorldX = -(mouseY - (canvas.height / 2.0 + panY)) / oldScale;
+            panX = mouseX - canvas.width / 2.0 - mouseWorldZ * scale;
+            panY = mouseY - canvas.height / 2.0 + mouseWorldX * scale;
+            vykresli();
+        }
+
+        canvas.addEventListener('wheel', (e) => { e.preventDefault(); handleZoom(e.deltaY, e.offsetX, e.offsetY); }, {passive: false});
+
+        const startDrag = (e) => {
+            if (e.touches && e.touches.length === 2) {
+                initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                initialScale = scale; return;
+            }
+            let coords = getEvtCoords(e);
+            isDragging = true; lastMousePt = coords;
+            let cx = canvas.width / 2 + panX;
+            let cy = canvas.height / 2 + panY;
+
+            for (let p of points) {
+                let px = cx + (p.z * scale);
+                let py = cy - ((p.x /2.0) * scale);
+                if (Math.hypot(coords.x - px, coords.y - py) < 15) { 
+                    if (selectedPoints.includes(p)) selectedPoints = selectedPoints.filter(pt => pt !== p);
+                    else { if (selectedPoints.length >= 2) selectedPoints.shift(); selectedPoints.push(p); }
+                    selectedSegment = null; aktualizujTlacidloSmeru(); vykresli(); return;
+                }
+            }
+
+            for (let i = drawnPathData.length - 1; i >= 0; i--) {
+                let sData = drawnPathData[i];
+                ctx.lineWidth = 15;
+                if (ctx.isPointInStroke(sData.path, coords.x, coords.y)) {
+                    let s = sData.segment;
+                    if (selectedSegment === s && s.connType === "Rádius (Oblúk)") s.flipArc = !s.flipArc;
+                    else {
+                        selectedSegment = s; selectedPoints = [];
+                        document.getElementById('connectTypeCombo').value = s.connType;
+                        document.getElementById('connectValueInput').value = s.connValue;
+                        typSpojeniaZmeneny();
+                    }
+                    aktualizujTlacidloSmeru(); vykresli(); return;
+                }
+            }
+            selectedSegment = null; aktualizujTlacidloSmeru(); vykresli();
+        };
+
+        const moveDrag = (e) => {
+            if (e.touches && e.touches.length === 2 && initialPinchDist) {
+                e.preventDefault();
+                let currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                scale = Math.max(0.5, Math.min(initialScale * (currentDist / initialPinchDist), 500.0));
+                vykresli(); return;
+            }
+
+            let coords = getEvtCoords(e);
+            if (isDragging) {
+                if(e.touches) e.preventDefault(); 
+                panX += coords.x - lastMousePt.x; panY += coords.y - lastMousePt.y;
+                lastMousePt = coords; vykresli(); return;
+            }
+
+            if(!e.touches) {
+                let cx = canvas.width / 2 + panX; let cy = canvas.height / 2 + panY;
+                let found = null;
+                for (let p of points) {
+                    if (Math.hypot(coords.x - (cx + p.z * scale), coords.y - (cy - (p.x / 2.0) * scale)) < 10) { found = p; break; }
+                }
+                if (found !== hoveredPoint) { hoveredPoint = found; vykresli(); oznacRiadokVTabulke(hoveredPoint); }
+            }
+        };
+
+        const stopDrag = () => { isDragging = false; initialPinchDist = null; };
+
+        canvas.addEventListener('mousedown', startDrag);
+        canvas.addEventListener('mousemove', moveDrag);
+        canvas.addEventListener('mouseup', stopDrag);
+        canvas.addEventListener('mouseleave', () => { stopDrag(); hoveredPoint = null; vykresli(); oznacRiadokVTabulke(null); });
+        canvas.addEventListener('touchstart', startDrag, {passive: false});
+        canvas.addEventListener('touchmove', moveDrag, {passive: false});
+        canvas.addEventListener('touchend', stopDrag);
+        window.addEventListener('keydown', (e) => { if (e.key === 'Delete') zmazOznacene(); });
+
+        function aktualizujPopisyVstupov() {
+            let isAbs = document.getElementById('absRadio').checked;
+            document.getElementById('xLabel').innerHTML = isAbs ? "X(Ø): <input type='number' id='xInput' placeholder='0.0'>" : "X(Inc): <input type='number' id='xInput' placeholder='0.0'>";
+            document.getElementById('zLabel').innerHTML = isAbs ? "Z: <input type='number' id='zInput' placeholder='0.0'>" : "Z(Inc): <input type='number' id='zInput' placeholder='0.0'>";
+        }
+
+        function typSpojeniaZmeneny() {
+            let sel = document.getElementById('connectTypeCombo').value;
+            document.getElementById('valueLabel').innerHTML = (sel === "Priamka") ? "Hrúbka: <input type='number' id='connectValueInput' value='1'>" : "R (mm): <input type='number' id='connectValueInput' value='1'>";
+            aktualizujTlacidloSmeru();
+        }
+
+        function aktualizujTlacidloSmeru() {
+            let btn = document.getElementById('flipArcButton');
+            if (selectedSegment && selectedSegment.connType === "Rádius (Oblúk)") {
+                btn.disabled = false; btn.title = selectedSegment.flipArc ? "Smer: CCW (Vymeniť)" : "Smer: CW (Vymeniť)";
+            } else { btn.disabled = true; btn.title = "Otočiť smer oblúka"; }
+        }
+
+        function otocRadius() {
+            if (selectedSegment && selectedSegment.connType === "Rádius (Oblúk)") {
+                selectedSegment.flipArc = !selectedSegment.flipArc;
+                aktualizujTlacidloSmeru(); vykresli(); saveState();
+            }
+        }
+
+        function pridajBodCezUI() {
+            let ix = parseFloat(document.getElementById('xInput').value);
+            let iz = parseFloat(document.getElementById('zInput').value);
+            if(isNaN(ix) || isNaN(iz)) { alert("Prosím, zadajte platné číselné hodnoty."); return; }
+
+            let isAbs = document.getElementById('absRadio').checked;
+            let absX, absZ;
+
+            if (isAbs) { 
+                absX = ix; 
+                absZ = iz; 
+            } else {
+                // Inkrementálne počítanie (U/W)
+                let prevAbsX = 0, prevAbsZ = 0;
+                if (points.length === 0) {
+                    // Ak nie sú body, berie sa poloha nástroja ako referenčný bod
+                    prevAbsX = parseFloat(document.getElementById('toolX').value) || 0;
+                    prevAbsZ = parseFloat(document.getElementById('toolZ').value) || 0;
+                } else {
+                    // Inak sa berie predchádzajúci bod
+                    prevAbsX = points[points.length - 1].x; 
+                    prevAbsZ = points[points.length - 1].z;
+                }
+                // ix je prírastok na priemere (CNC štandard)
+                absX = prevAbsX + ix; 
+                absZ = prevAbsZ + iz;
+            }
+
+            let newPt = { id: nextPointId++, x: absX, z: absZ };
+            points.push(newPt);
+            
+            if (document.getElementById('connectPointsCheck').checked && points.length > 1) {
+                let type = document.getElementById('connectTypeCombo').value;
+                let val = parseFloat(document.getElementById('connectValueInput').value) || 2;
+                let newSeg = { p1: points[points.length - 2], p2: newPt, connType: type, connValue: val, flipArc: false };
+                segments.push(newSeg); selectedSegment = newSeg; aktualizujTlacidloSmeru();
+            }
+            
+            prepocitajTabulku(); vykresli(); saveState();
+            document.getElementById('xInput').value = ""; document.getElementById('zInput').value = "";
+            document.getElementById('xInput').focus();
+        }
+
+        function zmazOznacene() {
+            let changed = false;
+            if (selectedSegment) { segments = segments.filter(s => s !== selectedSegment); selectedSegment = null; changed = true; }
+            if (selectedPoints.length > 0) {
+                selectedPoints.forEach(p => {
+                    points = points.filter(pt => pt !== p);
+                    segments = segments.filter(s => s.p1 !== p && s.p2 !== p);
+                });
+                selectedPoints = []; hoveredPoint = null; prepocitajTabulku(); changed = true;
+            }
+            aktualizujTlacidloSmeru(); vykresli();
+            if (changed) saveState();
+        }
+
+        function clearAll() {
+            if(!confirm("Ste si istý, že chcete zmazať všetky body a dráhy?")) return;
+            points = []; segments = []; selectedPoints = []; selectedSegment = null; hoveredPoint = null;
+            nextPointId = 1; panX = 0; panY = 0; scale = 40.0;
+            prepocitajTabulku(); aktualizujTlacidloSmeru(); vykresli(); saveState();
+        }
+
+        function aplikujNaVyber() {
+            let type = document.getElementById('connectTypeCombo').value;
+            let val = parseFloat(document.getElementById('connectValueInput').value) || 2;
+            let changed = false;
+
+            if (selectedSegment) { selectedSegment.connType = type; selectedSegment.connValue = val; changed = true; } 
+            else if (selectedPoints.length === 2) {
+                let existing = segments.find(s => (s.p1 === selectedPoints[0] && s.p2 === selectedPoints[1]) || (s.p1 === selectedPoints[1] && s.p2 === selectedPoints[0]));
+                if (existing) { existing.connType = type; existing.connValue = val; selectedSegment = existing; } 
+                else {
+                    let newSeg = { p1: selectedPoints[0], p2: selectedPoints[1], connType: type, connValue: val, flipArc: false };
+                    segments.push(newSeg); selectedSegment = newSeg;
+                }
+                changed = true;
+            }
+            aktualizujTlacidloSmeru(); vykresli();
+            if (changed) saveState();
+        }
+
+        function prepocitajTabulku() {
+            tbody.innerHTML = '';
+            if(points.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted); text-align:center; padding: 24px;">Zatiaľ neboli pridané žiadne body</td></tr>'; return; }
+            
+            let toolX = parseFloat(document.getElementById('toolX').value) || 0;
+            let toolZ = parseFloat(document.getElementById('toolZ').value) || 0;
+
+            points.forEach((p, i) => {
+                let tr = document.createElement('tr'); tr.dataset.id = p.id;
+                
+                // Inkrement voči predchádzajúcemu bodu (alebo nástroju pre prvý bod)
+                let prevX = i === 0 ? toolX : points[i - 1].x;
+                let prevZ = i === 0 ? toolZ : points[i - 1].z;
+                
+                let incX = (p.x - prevX).toFixed(3); // Inkrement priemeru (U)
+                let incZ = (p.z - prevZ).toFixed(3); // Inkrement dĺžky (W)
+                
+                tr.innerHTML = `<td>P${p.id}</td><td>${p.x.toFixed(3)}</td><td>${p.z.toFixed(3)}</td><td style="color:var(--text-muted)">${incX > 0 ? '+'+incX : incX}</td><td style="color:var(--text-muted)">${incZ > 0 ? '+'+incZ : incZ}</td>`;
+                
+                tr.addEventListener('mouseenter', () => { hoveredPoint = p; vykresli(); });
+                tr.addEventListener('mouseleave', () => { if (hoveredPoint === p) { hoveredPoint = null; vykresli(); } });
+                tr.addEventListener('click', () => { selectedPoints = [p]; selectedSegment = null; aktualizujTlacidloSmeru(); vykresli(); });
+                tbody.appendChild(tr);
+            });
+            oznacRiadokVTabulke(hoveredPoint);
+        }
+
+        function oznacRiadokVTabulke(p) {
+            Array.from(tbody.rows).forEach(r => r.classList.remove('selected-row'));
+            if (p) {
+                let tr = Array.from(tbody.rows).find(r => parseInt(r.dataset.id) === p.id);
+                if (tr) tr.classList.add('selected-row');
+            }
+        }
+
+        function exportCSV() {
+            if(points.length === 0) return alert("Nie sú k dispozícii žiadne body na export.");
+            let csv = "Bod,Abs X(Priemer),Abs Z,Inc X(Polomer),Inc Z\n";
+            
+            let toolX = parseFloat(document.getElementById('toolX').value) || 0;
+            let toolZ = parseFloat(document.getElementById('toolZ').value) || 0;
+
+            points.forEach((p, i) => {
+                let prevX = i === 0 ? toolX : points[i - 1].x;
+                let prevZ = i === 0 ? toolZ : points[i - 1].z;
+                let incX = (p.x - prevX).toFixed(3);
+                let incZ = (p.z - prevZ).toFixed(3);
+                csv += `P${p.id},${p.x.toFixed(3)},${p.z.toFixed(3)},${incX},${incZ}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = window.URL.createObjectURL(blob);
+            a.download = 'cncsustruzenie_export.csv';
+            a.click();
+        }
+
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rows = text.split('\n');
+                
+                let newPoints = [];
+                let maxId = 0;
+                
+                // Načítanie od druhého riadka (preskočíme hlavičku)
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i].trim();
+                    if (!row) continue;
+                    
+                    const cols = row.split(',');
+                    // Podľa exportu: Bod(0), Abs X(1), Abs Z(2)
+                    if (cols.length >= 3) {
+                        const idStr = cols[0].replace('P', '');
+                        const id = parseInt(idStr) || (maxId + 1);
+                        const x = parseFloat(cols[1]);
+                        const z = parseFloat(cols[2]);
+                        
+                        if (!isNaN(x) && !isNaN(z)) {
+                            newPoints.push({ id: id, x: x, z: z });
+                            if (id > maxId) maxId = id;
+                        }
+                    }
+                }
+                
+                if (newPoints.length > 0) {
+                     if (confirm(`Zistených bodov: ${newPoints.length}. Prajete si prepísať aktuálne dáta?`)) {
+                        points = newPoints;
+                        nextPointId = maxId + 1;
+                        
+                        // Automatické vytvorenie priamok medzi importovanými bodmi
+                        segments = [];
+                        for (let i = 1; i < points.length; i++) {
+                             segments.push({
+                                 p1: points[i-1], p2: points[i], connType: 'Priamka', connValue: 1, flipArc: false
+                             });
+                        }
+                        
+                        selectedPoints = []; selectedSegment = null;
+                        prepocitajTabulku(); vykresli(); saveState();
+                     }
+                } else {
+                    alert("Nepodarilo sa nájsť žiadne platné body v súbore CSV.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset, aby sme mohli znova načítať ten istý súbor
+        }
+
+        function zobrazGCode() {
+            if (points.length === 0) { alert("Nemáte vytvorené žiadne body pre generovanie dráhy."); return; }
+            let code = "(=== CNC SÚSTRUŽENIE ===)\n(Vygenerované v aplikácii)\n\nG21 (Metrické hodnoty)\nG18 (Pracovná rovina XZ)\nG90 (Absolútne programovanie)\n\n(--- Súradnice Bodov ---)\n";
+            points.forEach(p => { code += `(P${p.id}: X=Ø${p.x.toFixed(3)}, Z=${p.z.toFixed(3)})\n`; });
+            code += "\n(--- Generovaná Dráha ---)\n";
+            
+            // Nájazd na prvý bod (rýchloposuv)
+            code += `G00 X${points[0].x.toFixed(3)} Z${points[0].z.toFixed(3)}\n`;
+
+            segments.forEach(s => {
+                if (s.connType === "Priamka") code += `G01 X${s.p2.x.toFixed(3)} Z${s.p2.z.toFixed(3)}\n`;
+                else if (s.connType === "Rádius (Oblúk)") {
+                    // Pre správny CNC zápis sa oblúky pri sústružení zadávajú trochu inak, ale zachováme základ
+                    code += `${s.flipArc ? "G03" : "G02"} X${s.p2.x.toFixed(3)} Z${s.p2.z.toFixed(3)} R${s.connValue.toFixed(3)}\n`;
+                }
+            });
+            code += "M30 (Koniec programu)\n";
+            
+            document.getElementById('gcode-output').value = code;
+            document.getElementById('gcode-modal').style.display = 'flex';
+        }
+
+        function kopirovatGcode() {
+            const txt = document.getElementById("gcode-output");
+            txt.select(); 
+            document.execCommand("copy");
+        }
+
+        function vykresli() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawnPathData = [];
+            let cx = Math.floor(canvas.width / 2) + panX;
+            let cy = Math.floor(canvas.height / 2) + panY;
+
+            let root = getComputedStyle(document.documentElement);
+            let gridColor = root.getPropertyValue('--axis-color').trim();
+            let textColor = root.getPropertyValue('--text-color').trim();
+            let bgColor = root.getPropertyValue('--canvas-bg').trim();
+            let primaryColor = root.getPropertyValue('--primary').trim();
+            let dangerColor = root.getPropertyValue('--danger').trim();
+            let highlightColor = '#f59e0b'; // Amber highlight
+
+            if (document.getElementById('showAxesCheck').checked) {
+                ctx.strokeStyle = gridColor; ctx.lineWidth = 1; ctx.beginPath();
+                ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
+                ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height); ctx.stroke();
+                
+                ctx.fillStyle = textColor; ctx.font = "bold 11px var(--font-ui)";
+                ctx.fillText("+Z", canvas.width - 25, cy - 10); ctx.fillText("+X(Ø)", cx + 10, 20);
+
+                ctx.font = "10px var(--font-mono)";
+                let stepPx = (scale < 2 ? 10 : (scale < 10 ? 5 : 1)) * scale;
+                if (stepPx > 0) {
+                    for (let x = cx % stepPx; x < canvas.width; x += stepPx) {
+                        let val = Math.round((x - cx) / scale);
+                        if (val !== 0) { ctx.beginPath(); ctx.moveTo(x, cy - 3); ctx.lineTo(x, cy + 3); ctx.stroke(); ctx.fillText(val, x + 2, cy - 5); }
+                    }
+                    for (let y = cy % stepPx; y < canvas.height; y += stepPx) {
+                        let val = Math.round(-(y - cy) / scale);
+                        if (val !== 0) { ctx.beginPath(); ctx.moveTo(cx - 3, y); ctx.lineTo(cx + 3, y); ctx.stroke(); ctx.fillText(val, cx + 5, y - 2); }
+                    }
+                }
+            }
+
+            if (document.getElementById('showToolCheck').checked) {
+                let px = cx + (parseFloat(document.getElementById('toolZ').value) || 0) * scale;
+                let py = cy - ((parseFloat(document.getElementById('toolX').value) || 0) / 2.0) * scale;
+                
+                // Strohý dizajn nástroja - industriálny, ostrý
+                ctx.fillStyle = isDarkMode ? "#374151" : "#d1d5db"; ctx.beginPath(); 
+                ctx.moveTo(px + 6, py); ctx.lineTo(px + 24, py); ctx.lineTo(px + 24, py - 40); ctx.lineTo(px + 6, py - 40); ctx.closePath();
+                ctx.fill(); ctx.strokeStyle = isDarkMode ? "#9ca3af" : "#4b5563"; ctx.lineWidth = 1; ctx.stroke();
+
+                ctx.fillStyle = "#eab308"; ctx.beginPath(); // Žltý plátok (stále žltý pre viditeľnosť)
+                ctx.moveTo(px, py); ctx.lineTo(px + 6, py); ctx.lineTo(px + 6, py - 8); ctx.lineTo(px + 2, py - 8); ctx.closePath();
+                ctx.fill(); ctx.strokeStyle = "#ca8a04"; ctx.lineWidth = 1; ctx.stroke();
+                
+                ctx.fillStyle = textColor; ctx.font = "10px var(--font-ui)"; ctx.fillText("Nula (Nástroj)", px + 10, py + 16);
+                
+                // Indikátor nulového bodu (malý krížik)
+                ctx.beginPath(); ctx.moveTo(px - 4, py); ctx.lineTo(px + 4, py); ctx.moveTo(px, py - 4); ctx.lineTo(px, py + 4); 
+                ctx.strokeStyle = dangerColor; ctx.stroke();
+            }
+
+            const drawPath = (mirror) => {
+                let m = mirror ? -1 : 1;
+                segments.forEach(s => {
+                    let x1 = cx + s.p1.z * scale, y1 = cy - ((s.p1.x / 2.0) * scale) * m;
+                    let x2 = cx + s.p2.z * scale, y2 = cy - ((s.p2.x / 2.0) * scale) * m;
+                    let path = new Path2D();
+                    let lineWidth = 1.5;
+
+                    if (s.connType === "Priamka") {
+                        path.moveTo(x1, y1); path.lineTo(x2, y2); lineWidth = Math.max(1.5, s.connValue);
+                    } else if (s.connType === "Rádius (Oblúk)") {
+                        let r_px = Math.abs(s.connValue * scale);
+                        let dist = Math.hypot(x2 - x1, y2 - y1);
+                        if (dist > 0.001) {
+                            if (r_px < dist / 2.0) r_px = dist / 2.0;
+                            let mx = (x1 + x2) / 2.0, my = (y1 + y2) / 2.0;
+                            let nx = -(y2 - y1) / dist, ny = (x2 - x1) / dist;
+                            let isFlipped = mirror ? !s.flipArc : s.flipArc; 
+                            if (isFlipped) { nx = -nx; ny = -ny; }
+                            
+                            let h = Math.sqrt(r_px * r_px - (dist / 2.0) * (dist / 2.0));
+                            let circleX = mx + nx * h, circleY = my + ny * h;
+                            let sa = Math.atan2(y1 - circleY, x1 - circleX);
+                            let alpha = 2.0 * Math.asin(Math.min(1.0, (dist / 2.0) / r_px));
+                            let sweep = isFlipped ? -alpha : alpha;
+                            
+                            for (let j = 0; j <= 50; j++) {
+                                let a = sa + sweep * j / 50;
+                                let px = circleX + r_px * Math.cos(a), py = circleY + r_px * Math.sin(a);
+                                if (j === 0) path.moveTo(px, py); else path.lineTo(px, py);
+                            }
+                        }
+                    }
+
+                    ctx.strokeStyle = mirror ? gridColor : ((s === selectedSegment) ? highlightColor : primaryColor);
+                    ctx.lineWidth = mirror ? 1 : ((s === selectedSegment) ? lineWidth + 1.5 : lineWidth);
+                    if(mirror) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+                    ctx.stroke(path); ctx.setLineDash([]);
+                    if(!mirror) drawnPathData.push({ path: path, segment: s });
+                });
+            };
+
+            if (document.getElementById('showMirrorCheck').checked && points.length > 0) {
+                drawPath(true);
+                ctx.strokeStyle = gridColor; ctx.setLineDash([2, 2]); ctx.lineWidth = 1;
+                let first = points[0], last = points[points.length - 1];
+                ctx.beginPath(); ctx.moveTo(cx + first.z * scale, cy - (first.x / 2.0) * scale); ctx.lineTo(cx + first.z * scale, cy + (first.x / 2.0) * scale); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx + last.z * scale, cy - (last.x / 2.0) * scale); ctx.lineTo(cx + last.z * scale, cy + (last.x / 2.0) * scale); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            drawPath(false);
+
+            let showLabels = document.getElementById('showLabelsCheck').checked;
+            points.forEach(p => {
+                let px = cx + p.z * scale, py = cy - (p.x / 2.0) * scale;
+                ctx.beginPath();
+                ctx.arc(px, py, (p === hoveredPoint || selectedPoints.includes(p)) ? 5 : 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = selectedPoints.includes(p) ? dangerColor : (p === hoveredPoint ? highlightColor : primaryColor);
+                ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = bgColor; ctx.stroke(); 
+                if (showLabels) { ctx.fillStyle = textColor; ctx.font = "10px var(--font-ui)"; ctx.fillText("P" + p.id, px + 8, py - 8); }
+            });
+        }
+    </script>
+</body>
+</html>
